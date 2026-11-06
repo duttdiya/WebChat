@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const express = require("express");
@@ -35,13 +34,9 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
 
-
-
 app.get("/", (req, res) => {
   res.send("WebChat backend is running!");
 });
-
-
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -60,7 +55,6 @@ io.use(async (socket, next) => {
 
     socket.userId = user._id.toString();
     next();
-
   } catch (error) {
     next(new Error("Invalid or expired token"));
   }
@@ -70,6 +64,54 @@ io.on("connection", (socket) => {
   console.log("Authenticated user connected:", socket.userId);
 
   socket.join(`user:${socket.userId}`);
+
+  socket.on("typing", async (data) => {
+    try {
+      const { receiverId } = data;
+
+      if (!mongoose.Types.ObjectId.isValid(receiverId)) return;
+
+      const connection = await ConnectionRequest.findOne({
+        status: "accepted",
+        $or: [
+          { sender: socket.userId, receiver: receiverId },
+          { sender: receiverId, receiver: socket.userId },
+        ],
+      });
+
+      if (!connection) return;
+
+      io.to(`user:${receiverId}`).emit("user_typing", {
+        senderId: socket.userId,
+      });
+    } catch (error) {
+      console.log("Typing error:", error.message);
+    }
+  });
+
+  socket.on("stop_typing", async (data) => {
+    try {
+      const { receiverId } = data;
+
+      if (!mongoose.Types.ObjectId.isValid(receiverId)) return;
+
+      const connection = await ConnectionRequest.findOne({
+        status: "accepted",
+        $or: [
+          { sender: socket.userId, receiver: receiverId },
+          { sender: receiverId, receiver: socket.userId },
+        ],
+      });
+
+      if (!connection) return;
+
+      io.to(`user:${receiverId}`).emit("user_stopped_typing", {
+        senderId: socket.userId,
+      });
+    } catch (error) {
+      console.log("Stop typing error:", error.message);
+    }
+  });
 
   socket.on("send_message", async (data) => {
     try {
@@ -82,13 +124,13 @@ io.on("connection", (socket) => {
         text.trim().length > 5000
       ) {
         return socket.emit("message_error", {
-          message: "Invalid message or receiver."
+          message: "Invalid message or receiver.",
         });
       }
 
       if (receiverId === socket.userId) {
         return socket.emit("message_error", {
-          message: "You cannot message yourself."
+          message: "You cannot message yourself.",
         });
       }
 
@@ -96,20 +138,20 @@ io.on("connection", (socket) => {
         status: "accepted",
         $or: [
           { sender: socket.userId, receiver: receiverId },
-          { sender: receiverId, receiver: socket.userId }
-        ]
+          { sender: receiverId, receiver: socket.userId },
+        ],
       });
 
       if (!connection) {
         return socket.emit("message_error", {
-          message: "You can only message connected users."
+          message: "You can only message connected users.",
         });
       }
 
       const message = await Message.create({
         sender: socket.userId,
         receiver: receiverId,
-        text: text.trim()
+        text: text.trim(),
       });
 
       const savedMessage = await Message.findById(message._id)
@@ -119,12 +161,11 @@ io.on("connection", (socket) => {
       io.to(`user:${socket.userId}`)
         .to(`user:${receiverId}`)
         .emit("new_message", savedMessage);
-
     } catch (error) {
       console.error("Message sending error:", error);
 
       socket.emit("message_error", {
-        message: "Could not send message."
+        message: "Could not send message.",
       });
     }
   });
@@ -145,7 +186,6 @@ async function startServer() {
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
-
   } catch (error) {
     console.error("Database connection failed:", error.message);
   }

@@ -12,7 +12,6 @@ function FindPeople() {
   const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState(null);
 
-  // Search users
   async function handleSearch(e) {
     e.preventDefault();
 
@@ -69,7 +68,6 @@ function FindPeople() {
         return;
       }
 
-      // Get connection status of each user
       const results = await Promise.all(
         foundUsers.map(async (user) => {
           const statusResponse = await fetch(
@@ -101,7 +99,6 @@ function FindPeople() {
     }
   }
 
-  // Send friend request
   async function sendRequest(userId) {
     const token = localStorage.getItem("token");
 
@@ -140,7 +137,6 @@ function FindPeople() {
         return;
       }
 
-      // Update user status
       setStatuses((previous) => ({
         ...previous,
         [userId]: "sent",
@@ -159,7 +155,6 @@ function FindPeople() {
   return (
     <div className="min-h-screen bg-[#111B21] text-[#E9EDEF]">
 
-      {/* Header */}
       <header className="flex h-20 items-center gap-4 border-b border-[#2A3942] bg-[#202C33] px-6">
 
         <button
