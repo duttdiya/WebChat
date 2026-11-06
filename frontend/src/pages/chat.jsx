@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import socket from "../socket";
 
 function Chat() {
   const navigate = useNavigate();
@@ -8,9 +9,15 @@ function Chat() {
   const [myProfile, setMyProfile] = useState(null);
   const [connections, setConnections] = useState([]);
   const [requestCount, setRequestCount] = useState(0);
+
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [search, setSearch] = useState("");
+
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+
   const [loading, setLoading] = useState(true);
+  const [chatError, setChatError] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,60 +56,173 @@ function Chat() {
           localStorage.removeItem("token");
           localStorage.removeItem("email");
           localStorage.removeItem("username");
-
           navigate("/login");
           return;
         }
 
-        if (
-          !profileRes.ok ||
-          !requestsRes.ok ||
-          !connectionsRes.ok
-        ) {
-          throw new Error("Failed to load data");
+        if (!profileRes.ok || !requestsRes.ok || !connectionsRes.ok) {
+          throw new Error("Unable to load data");
         }
 
         const profileData = await profileRes.json();
         const requestsData = await requestsRes.json();
         const connectionsData = await connectionsRes.json();
 
-        setMyProfile(profileData.user);
-        setRequestCount(requestsData.requests?.length || 0);
-        setConnections(connectionsData.connections || []);
+        setMyProfile({
+          ...profileData.user,
+          _id: profileData.user.id,
+        });
+
+        setRequestCount(requestsData.requests.length);
+        setConnections(connectionsData.connections);
 
       } catch (error) {
         console.log(error);
-      } finally {
-        setLoading(false);
       }
+
+      setLoading(false);
     };
 
     loadData();
   }, [navigate]);
 
-  // Search friends
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) return;
+
+    socket.auth = { token };
+    socket.connect();
+
+    socket.on("connect_error", (error) => {
+      console.log("Socket error:", error.message);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedFriend) {
+      setMessages([]);
+      return;
+    }
+
+    const loadMessages = async () => {
+      const token = localStorage.getItem("token");
+
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/messages/${selectedFriend._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message);
+        }
+
+        setMessages(data.messages);
+
+      } catch (error) {
+        console.log(error);
+        setChatError(error.message);
+      }
+    };
+
+    setMessages([]);
+    setChatError("");
+    loadMessages();
+
+  }, [selectedFriend]);
+
+  useEffect(() => {
+    if (!selectedFriend || !myProfile) return;
+
+    const handleMessage = (message) => {
+      const senderId = message.sender._id || message.sender;
+      const receiverId = message.receiver._id || message.receiver;
+
+      const myId = myProfile._id;
+      const friendId = selectedFriend._id;
+
+      if (
+        (senderId === myId && receiverId === friendId) ||
+        (senderId === friendId && receiverId === myId)
+      ) {
+        setMessages((oldMessages) => {
+          const alreadyAdded = oldMessages.some(
+            (item) => item._id === message._id
+          );
+
+          if (alreadyAdded) return oldMessages;
+
+          return [...oldMessages, message];
+        });
+      }
+    };
+
+    socket.on("new_message", handleMessage);
+
+    return () => {
+      socket.off("new_message", handleMessage);
+    };
+
+  }, [selectedFriend, myProfile]);
+
+  const getPhoto = (picture) => {
+    if (!picture) return "";
+
+    return `http://localhost:5000${picture}`;
+  };
+
   const filteredConnections = connections.filter((item) => {
     const friend = item.user;
 
-    if (!friend) return false;
-
     const name = friend.name || "";
     const username = friend.username || "";
-    const email = friend.email || "";
 
-    const searchText = `${name} ${username} ${email}`;
-
-    return searchText.toLowerCase().includes(search.toLowerCase());
+    return `${name} ${username}`
+      .toLowerCase()
+      .includes(search.toLowerCase());
   });
 
-  // Get profile picture
-  const getPhoto = (picture) => {
-    if (picture) {
-      return `http://localhost:5000${picture}`;
+  const sendMessage = (e) => {
+    e.preventDefault();
+
+    if (!newMessage.trim()) return;
+
+    if (!socket.connected) {
+      setChatError("Not connected. Please try again.");
+      return;
     }
 
-    return "";
+    socket.emit("send_message", {
+      receiverId: selectedFriend._id,
+      text: newMessage,
+    });
+
+    setNewMessage("");
+    setChatError("");
   };
+
+  useEffect(() => {
+    const showError = (data) => {
+      setChatError(data.message);
+    };
+
+    socket.on("message_error", showError);
+
+    return () => {
+      socket.off("message_error", showError);
+    };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#111B21] text-[#E9EDEF]">
@@ -116,7 +236,6 @@ function Chat() {
         <button
           onClick={() => setSelectedFriend(null)}
           className="mt-8 rounded-xl p-3 text-[#00A884] hover:bg-[#2A3942]"
-          title="Chats"
         >
           Chats
         </button>
@@ -124,7 +243,6 @@ function Chat() {
         <button
           onClick={() => navigate("/find-people")}
           className="mt-4 rounded-xl p-3 text-[#AEBAC1] hover:bg-[#2A3942]"
-          title="Find People"
         >
           +
         </button>
@@ -132,12 +250,11 @@ function Chat() {
         <button
           onClick={() => navigate("/connection-requests")}
           className="relative mt-4 rounded-xl p-3 text-[#AEBAC1] hover:bg-[#2A3942]"
-          title="Friend Requests"
         >
           Requests
 
           {requestCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
+            <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-2 text-xs text-white">
               {requestCount}
             </span>
           )}
@@ -146,7 +263,6 @@ function Chat() {
         <button
           onClick={() => navigate("/my-profile")}
           className="mt-auto flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#075E54] font-semibold"
-          title="My Profile"
         >
           {myProfile?.profilePicture ? (
             <img
@@ -158,7 +274,6 @@ function Chat() {
             myProfile?.username?.charAt(0).toUpperCase() || "U"
           )}
         </button>
-
       </aside>
 
       <section className="flex w-[340px] flex-col border-r border-[#2A3942] bg-[#202C33] sm:w-[380px]">
@@ -185,45 +300,33 @@ function Chat() {
             </p>
           ) : filteredConnections.length === 0 ? (
             <div className="px-6 py-12 text-center">
-
-              <h3 className="font-semibold">
-                {search ? "No friends found" : "No chats yet"}
-              </h3>
+              <h3 className="font-semibold">No chats yet</h3>
 
               <p className="mt-2 text-sm text-[#8696A0]">
-                {search
-                  ? "Try another name."
-                  : "Find people and connect with them."}
+                Find people and connect with them.
               </p>
 
-              {!search && (
-                <button
-                  onClick={() => navigate("/find-people")}
-                  className="mt-5 rounded-lg bg-[#00A884] px-5 py-2 text-sm font-semibold text-white"
-                >
-                  Find People
-                </button>
-              )}
-
+              <button
+                onClick={() => navigate("/find-people")}
+                className="mt-5 rounded-lg bg-[#00A884] px-5 py-2 text-sm font-semibold text-white"
+              >
+                Find People
+              </button>
             </div>
           ) : (
-            filteredConnections.map((connection) => {
-              const friend = connection.user;
-
-              if (!friend) return null;
-
-              const isSelected =
-                selectedFriend?._id === friend._id;
+            filteredConnections.map((item) => {
+              const friend = item.user;
 
               return (
                 <button
-                  key={connection.requestId}
+                  key={item.requestId}
                   onClick={() => setSelectedFriend(friend)}
                   className={`flex w-full items-center gap-3 border-b border-[#2A3942] px-4 py-4 text-left hover:bg-[#2A3942] ${
-                    isSelected ? "bg-[#2A3942]" : ""
+                    selectedFriend?._id === friend._id
+                      ? "bg-[#2A3942]"
+                      : ""
                   }`}
                 >
-
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#075E54] font-semibold">
 
                     {friend.profilePicture ? (
@@ -241,7 +344,6 @@ function Chat() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-
                     <h3 className="truncate font-medium">
                       {friend.name}
                     </h3>
@@ -249,13 +351,11 @@ function Chat() {
                     <p className="mt-1 truncate text-xs text-[#8696A0]">
                       @{friend.username || "user"}
                     </p>
-
                   </div>
 
                   <span className="text-xs text-[#00A884]">
                     Connected
                   </span>
-
                 </button>
               );
             })
@@ -264,7 +364,6 @@ function Chat() {
         </div>
       </section>
 
-      {/* Chat Window */}
       <main className="flex min-w-0 flex-1 flex-col bg-[#111B21]">
 
         {selectedFriend ? (
@@ -273,7 +372,6 @@ function Chat() {
             <header className="flex h-[72px] items-center gap-3 border-b border-[#2A3942] bg-[#202C33] px-6">
 
               <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-[#075E54]">
-
                 {selectedFriend.profilePicture ? (
                   <img
                     src={getPhoto(selectedFriend.profilePicture)}
@@ -284,7 +382,6 @@ function Chat() {
                   selectedFriend.username?.charAt(0).toUpperCase() ||
                   selectedFriend.name?.charAt(0).toUpperCase()
                 )}
-
               </div>
 
               <div>
@@ -296,29 +393,81 @@ function Chat() {
                   @{selectedFriend.username || "user"}
                 </p>
               </div>
-
             </header>
 
-            <div className="flex flex-1 items-center justify-center">
+            {/* Messages */}
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-6">
 
-              <div className="text-center">
+              {messages.length === 0 ? (
+                <div className="m-auto text-center">
+                  <h2 className="text-xl font-semibold">
+                    Start a conversation
+                  </h2>
 
-                <h2 className="text-xl font-semibold">
-                  Chat with {selectedFriend.name}
-                </h2>
+                  <p className="mt-2 text-sm text-[#8696A0]">
+                    Send your first message to {selectedFriend.name}.
+                  </p>
+                </div>
+              ) : (
+                messages.map((message) => {
+                  const senderId = message.sender._id || message.sender;
 
-               
-              </div>
+                  const isMine = senderId === myProfile?._id;
+
+                  return (
+                    <div
+                      key={message._id}
+                      className={`flex ${
+                        isMine ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[75%] break-words rounded-xl px-4 py-3 ${
+                          isMine ? "bg-[#005C4B]" : "bg-[#202C33]"
+                        }`}
+                      >
+                        <p className="text-sm">
+                          {message.text}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {chatError && (
+                <p className="text-center text-sm text-red-400">
+                  {chatError}
+                </p>
+              )}
 
             </div>
 
+            <form
+              onSubmit={sendMessage}
+              className="flex items-center gap-3 border-t border-[#2A3942] bg-[#202C33] p-4"
+            >
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 rounded-full bg-[#2A3942] px-5 py-3 text-sm outline-none"
+              />
+
+              <button
+                type="submit"
+                disabled={!newMessage.trim()}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00A884] text-white hover:bg-[#008F72] disabled:opacity-50"
+              >
+                ➤
+              </button>
+            </form>
+
           </>
         ) : (
-
           <div className="flex flex-1 items-center justify-center">
-
             <div className="max-w-md px-6 text-center">
-
               <h2 className="text-2xl font-semibold">
                 Welcome to WebChat
               </h2>
@@ -327,15 +476,11 @@ function Chat() {
                 Select a friend from your chat list to open a conversation.
                 Your accepted connections will appear here.
               </p>
-
             </div>
-
           </div>
-
         )}
 
       </main>
-
     </div>
   );
 }
