@@ -155,26 +155,40 @@ function FindPeople() {
   return (
     <div className="min-h-screen bg-[#111B21] text-[#E9EDEF]">
 
-      <header className="flex h-20 items-center gap-4 border-b border-[#2A3942] bg-[#202C33] px-6">
+      <header className="flex h-20 items-center gap-4 border-b border-[#2A3942] bg-[#172229] px-6 shadow-sm">
 
-        <button
-          onClick={() => navigate("/chat")}
-          className="text-2xl text-[#AEBAC1] hover:text-[#00A884]"
-        >
-          Back
-        </button>
+  <button
+    onClick={() => navigate("/chat")}
+    className="group flex h-11 w-11 items-center justify-center rounded-xl border border-[#34434B] bg-[#202C33] text-[#AEBAC1] transition-all duration-200 hover:border-[#00A884] hover:bg-[#075E54] hover:text-white"
+    title="Back to chat"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-5 w-5 transition-transform duration-200 group-hover:-translate-x-1"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 19l-7-7 7-7M8 12h13"
+      />
+    </svg>
+  </button>
 
-        <div>
-          <h1 className="text-lg font-semibold">
-            Find People
-          </h1>
+  <div>
+    <h1 className="text-lg font-semibold tracking-wide text-[#E9EDEF]">
+      Find People
+    </h1>
 
-          <p className="text-xs text-[#8696A0]">
-            Connect with people on WebChat
-          </p>
-        </div>
+    <p className="mt-1 text-xs text-[#8696A0]">
+      Discover and connect with people on WebChat
+    </p>
+  </div>
 
-      </header>
+</header>
 
       <main className="mx-auto max-w-2xl px-5 py-12">
 

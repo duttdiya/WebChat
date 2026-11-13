@@ -263,8 +263,7 @@ function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-green-50 px-4 py-8">
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-md sm:p-8">
+<div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-green-700 via-green-600 to-emerald-800 px-4 py-8">      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-md sm:p-8">
 
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-bold text-green-600">

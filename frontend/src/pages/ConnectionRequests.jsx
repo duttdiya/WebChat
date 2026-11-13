@@ -10,7 +10,6 @@ function ConnectionRequests() {
   const [message, setMessage] = useState("");
   const [processingId, setProcessingId] = useState(null);
 
-  // Fetch received connection requests
   async function fetchRequests() {
     try {
       const token = localStorage.getItem("token");
@@ -57,7 +56,6 @@ function ConnectionRequests() {
     fetchRequests();
   }, []);
 
-  // Accept or reject a request
   async function handleRequest(requestId, action) {
     try {
       setProcessingId(requestId);
@@ -92,7 +90,6 @@ function ConnectionRequests() {
         return;
       }
 
-      // Remove the handled request from the list
       setRequests((previousRequests) =>
         previousRequests.filter(
           (request) => request._id !== requestId
@@ -111,7 +108,6 @@ function ConnectionRequests() {
   return (
     <div className="min-h-screen bg-[#111B21] text-[#E9EDEF]">
 
-      {/* Header */}
       <header className="flex h-20 items-center gap-4 border-b border-[#2A3942] bg-[#202C33] px-6">
 
         <button
@@ -133,7 +129,6 @@ function ConnectionRequests() {
 
       </header>
 
-      {/* Main Content */}
       <main className="mx-auto max-w-2xl px-5 py-10">
 
         <h2 className="mb-6 text-xl font-semibold">
@@ -152,7 +147,6 @@ function ConnectionRequests() {
           </p>
         ) : requests.length === 0 ? (
           <div className="rounded-xl border border-[#2A3942] bg-[#202C33] p-10 text-center">
-            <div className="mb-3 text-4xl">👥</div>
 
             <h3 className="font-semibold">
               No connection requests yet
@@ -183,7 +177,6 @@ function ConnectionRequests() {
                   className="flex flex-col gap-4 rounded-xl border border-[#2A3942] bg-[#202C33] p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
 
-                  {/* Sender Details */}
                   <div className="flex items-center gap-3">
 
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#075E54] text-lg font-semibold text-white">
@@ -218,7 +211,6 @@ function ConnectionRequests() {
 
                   </div>
 
-                  {/* Accept and Reject */}
                   <div className="flex gap-2">
 
                     <button

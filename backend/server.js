@@ -24,7 +24,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-
+const onlineUsers = new Set();
 app.use(cors());
 app.use(express.json());
 
@@ -64,6 +64,13 @@ io.on("connection", (socket) => {
   console.log("Authenticated user connected:", socket.userId);
 
   socket.join(`user:${socket.userId}`);
+
+  onlineUsers.add(socket.userId);
+socket.emit("online_users", Array.from(onlineUsers));
+  io.emit("user_status", {
+    userId: socket.userId,
+    isOnline: true,
+  });
 
   socket.on("typing", async (data) => {
     try {
@@ -114,65 +121,108 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send_message", async (data) => {
-    try {
-      const { receiverId, text } = data;
+  try {
+    const { receiverId, text } = data;
 
-      if (
-        !mongoose.Types.ObjectId.isValid(receiverId) ||
-        typeof text !== "string" ||
-        !text.trim() ||
-        text.trim().length > 5000
-      ) {
-        return socket.emit("message_error", {
-          message: "Invalid message or receiver.",
-        });
+    if (!mongoose.Types.ObjectId.isValid(receiverId)) return;
+    if (!text || !text.trim() || text.length > 5000) return;
+    if (receiverId === socket.userId.toString()) return;
+
+    const connection = await ConnectionRequest.findOne({
+      status: "accepted",
+      $or: [
+        { sender: socket.userId, receiver: receiverId },
+        { sender: receiverId, receiver: socket.userId },
+      ],
+    });
+
+    if (!connection) return;
+
+    const message = await Message.create({
+      sender: socket.userId,
+      receiver: receiverId,
+      text: text.trim(),
+      isRead: false,
+    });
+
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender", "name username profilePicture")
+      .populate("receiver", "name username profilePicture");
+
+    io.to(`user:${socket.userId}`).emit("new_message", populatedMessage);
+    io.to(`user:${receiverId}`).emit("new_message", populatedMessage);
+
+    socket.emit("message_status", {
+      messageId: message._id,
+      status: "sent",
+    });
+
+    const receiverRoom = io.sockets.adapter.rooms.get(`user:${receiverId}`);
+
+   if (receiverRoom && receiverRoom.size > 0) {
+  io.to(`user:${socket.userId}`).emit("message_status", {
+    messageId: message._id.toString(),
+    status: "delivered",
+  });
+}
+  } catch (error) {
+    socket.emit("message_error", {
+      message: "Message could not be sent",
+    });
+  }
+});
+socket.on("mark_messages_read", async (data) => {
+  try {
+    const { senderId } = data;
+
+    if (!mongoose.Types.ObjectId.isValid(senderId)) return;
+
+    const connection = await ConnectionRequest.findOne({
+      status: "accepted",
+      $or: [
+        { sender: socket.userId, receiver: senderId },
+        { sender: senderId, receiver: socket.userId },
+      ],
+    });
+
+    if (!connection) return;
+
+    const result = await Message.updateMany(
+      {
+        sender: senderId,
+        receiver: socket.userId,
+        isRead: false,
+      },
+      {
+        $set: { isRead: true },
       }
+    );
 
-      if (receiverId === socket.userId) {
-        return socket.emit("message_error", {
-          message: "You cannot message yourself.",
-        });
-      }
-
-      const connection = await ConnectionRequest.findOne({
-        status: "accepted",
-        $or: [
-          { sender: socket.userId, receiver: receiverId },
-          { sender: receiverId, receiver: socket.userId },
-        ],
-      });
-
-      if (!connection) {
-        return socket.emit("message_error", {
-          message: "You can only message connected users.",
-        });
-      }
-
-      const message = await Message.create({
-        sender: socket.userId,
-        receiver: receiverId,
-        text: text.trim(),
-      });
-
-      const savedMessage = await Message.findById(message._id)
-        .populate("sender", "name username profilePicture")
-        .populate("receiver", "name username profilePicture");
-
-      io.to(`user:${socket.userId}`)
-        .to(`user:${receiverId}`)
-        .emit("new_message", savedMessage);
-    } catch (error) {
-      console.error("Message sending error:", error);
-
-      socket.emit("message_error", {
-        message: "Could not send message.",
+    if (result.modifiedCount > 0) {
+      io.to(`user:${senderId}`).emit("messages_read", {
+        readerId: socket.userId.toString(),
       });
     }
-  });
+  } catch (error) {
+    console.log("Read receipt error:", error.message);
+  }
+});
+ socket.on("disconnect", () => {
+  console.log("User disconnected:", socket.userId);
 
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.userId);
-  });
+  const userSockets = io.sockets.adapter.rooms.get(
+    `user:${socket.userId}`
+  );
+
+  if (!userSockets || userSockets.size === 0) {
+    onlineUsers.delete(socket.userId);
+
+    io.emit("user_status", {
+      userId: socket.userId,
+      isOnline: false,
+    });
+  }
+});
 });
 
 async function startServer() {

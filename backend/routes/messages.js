@@ -1,5 +1,4 @@
 
-
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -35,15 +34,6 @@ router.get("/:userId", async (req, res) => {
         message: "You are not connected with this user."
       });
     }
-
-    await Message.updateMany(
-      {
-        sender: userId,
-        receiver: myId,
-        isRead: false
-      },
-      { $set: { isRead: true } }
-    );
 
     const messages = await Message.find({
       $or: [
