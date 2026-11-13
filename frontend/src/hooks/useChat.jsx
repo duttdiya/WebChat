@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import socket from "../socket";
@@ -16,7 +15,8 @@ function useChat() {
   const [messages, setMessages] = useState([]);
   const [messageStatuses, setMessageStatuses] = useState({});
   const [newMessage, setNewMessage] = useState("");
-
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chatError, setChatError] = useState("");
   const [friendTyping, setFriendTyping] = useState(false);
@@ -39,19 +39,18 @@ function useChat() {
       };
 
       try {
-        const profileRes = await fetch(
-          "http://localhost:5000/api/profile/me",
-          { headers }
-        );
+        const profileRes = await fetch("http://localhost:5000/api/profile/me", {
+          headers,
+        });
 
         const requestsRes = await fetch(
           "http://localhost:5000/api/users/requests/received",
-          { headers }
+          { headers },
         );
 
         const connectionsRes = await fetch(
           "http://localhost:5000/api/users/connections",
-          { headers }
+          { headers },
         );
 
         if (
@@ -120,9 +119,7 @@ function useChat() {
     const handleUserStatus = ({ userId, isOnline }) => {
       setOnlineUsers((previous) => {
         if (isOnline) {
-          return previous.includes(userId)
-            ? previous
-            : [...previous, userId];
+          return previous.includes(userId) ? previous : [...previous, userId];
         }
 
         return previous.filter((id) => id !== userId);
@@ -154,7 +151,7 @@ function useChat() {
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         const data = await response.json();
@@ -212,7 +209,7 @@ function useChat() {
       ) {
         setMessages((oldMessages) => {
           const alreadyAdded = oldMessages.some(
-            (item) => item._id === message._id
+            (item) => item._id === message._id,
           );
 
           if (alreadyAdded) return oldMessages;
@@ -290,7 +287,7 @@ function useChat() {
           }
 
           return message;
-        })
+        }),
       );
     };
 
@@ -313,12 +310,12 @@ function useChat() {
     };
   }, []);
 
- useEffect(() => {
-  if (messagesContainerRef.current) {
-    messagesContainerRef.current.scrollTop =
-      messagesContainerRef.current.scrollHeight;
-  }
-}, [messages, friendTyping, selectedFriend]);
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, friendTyping, selectedFriend]);
   const getPhoto = (picture) => {
     if (!picture) return "";
 
@@ -331,9 +328,7 @@ function useChat() {
     const name = friend.name || "";
     const username = friend.username || "";
 
-    return `${name} ${username}`
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    return `${name} ${username}`.toLowerCase().includes(search.toLowerCase());
   });
 
   const handleTyping = (e) => {
@@ -367,7 +362,77 @@ function useChat() {
       });
     }, 1000);
   };
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
 
+    if (!file) return;
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setChatError("Please select a valid photo or video.");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setChatError("File size must not exceed 50 MB.");
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+    setChatError("");
+  };
+  const sendMedia = async () => {
+    if (!selectedFile || !selectedFriend || uploading) return;
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    setUploading(true);
+    setChatError("");
+
+    const formData = new FormData();
+    formData.append("media", selectedFile);
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/messages/upload/${selectedFriend._id}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Media upload failed.");
+      }
+
+      setSelectedFile(null);
+    } catch (error) {
+      setChatError(error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
   const sendMessage = (e) => {
     e.preventDefault();
 
@@ -415,6 +480,11 @@ function useChat() {
     filteredConnections,
     handleTyping,
     sendMessage,
+    selectedFile,
+    setSelectedFile,
+    uploading,
+    handleFileSelect,
+    sendMedia,
   };
 }
 

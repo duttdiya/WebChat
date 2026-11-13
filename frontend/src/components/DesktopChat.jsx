@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 
 function DesktopChat({ chat }) {
@@ -22,6 +21,11 @@ function DesktopChat({ chat }) {
     filteredConnections,
     handleTyping,
     sendMessage,
+    selectedFile,
+    setSelectedFile,
+    uploading,
+    handleFileSelect,
+    sendMedia,
   } = chat;
 
   const [sidebarWidth, setSidebarWidth] = useState(30);
@@ -342,8 +346,7 @@ function DesktopChat({ chat }) {
                   </div>
                 ) : (
                   messages.map((message) => {
-                    const senderId =
-                      message.sender?._id || message.sender;
+                    const senderId = message.sender?._id || message.sender;
 
                     const isMine = senderId === myProfile?._id;
 
@@ -363,8 +366,25 @@ function DesktopChat({ chat }) {
                             isMine ? "bg-[#005C4B]" : "bg-[#202C33]"
                           }`}
                         >
-                          <p className="text-sm">{message.text}</p>
+{message.mediaType === "image" && message.mediaUrl && (
+  <img
+    src={`http://localhost:5000${message.mediaUrl}`}
+    alt="Shared photo"
+    className="max-h-72 max-w-full rounded-lg object-contain"
+  />
+)}
 
+{message.mediaType === "video" && message.mediaUrl && (
+  <video
+    src={`http://localhost:5000${message.mediaUrl}`}
+    controls
+    className="max-h-72 max-w-full rounded-lg"
+  />
+)}
+
+{message.text && (
+  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+)}
                           {isMine && (
                             <div className="mt-1 flex justify-end">
                               <span
@@ -410,44 +430,90 @@ function DesktopChat({ chat }) {
 
               <form
                 onSubmit={sendMessage}
-                className="flex shrink-0 items-center gap-3 border-t border-[#2A3942] bg-[#202C33] p-4"
+                className="flex shrink-0 flex-col gap-2 border-t border-[#2A3942] bg-[#202C33] p-4"
               >
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={handleTyping}
-                  placeholder="Type a message..."
-                  className="min-w-0 flex-1 rounded-full bg-[#2A3942] px-5 py-3 text-sm outline-none"
-                />
+                {selectedFile && (
+                  <div className="flex items-center justify-between rounded-lg bg-[#2A3942] p-3">
+                    <span className="truncate text-sm">
+                      {selectedFile.name}
+                    </span>
 
-                <button
-                  type="submit"
-                  disabled={!newMessage.trim()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white hover:bg-[#008F72] disabled:opacity-50"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      className="ml-3 text-red-400"
+                    >
+                      Remove
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={sendMedia}
+                      disabled={uploading}
+                      className="ml-3 rounded-lg bg-[#00A884] px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {uploading ? "Uploading..." : "Send"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#2A3942] text-[#00A884] hover:bg-[#354650]">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+
+                    <svg
+                      width="21"
+                      height="21"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={handleTyping}
+                    placeholder="Type a message..."
+                    className="min-w-0 flex-1 rounded-full bg-[#2A3942] px-5 py-3 text-sm outline-none"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white hover:bg-[#008F72] disabled:opacity-50"
                   >
-                    <path d="m22 2-7 20-4-9-9-4Z" />
-                    <path d="M22 2 11 13" />
-                  </svg>
-                </button>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m22 2-7 20-4-9-9-4Z" />
+                      <path d="M22 2 11 13" />
+                    </svg>
+                  </button>
+                </div>
               </form>
             </>
           ) : (
             <div className="flex flex-1 items-center justify-center">
               <div className="max-w-md px-6 text-center">
-                <h2 className="text-2xl font-semibold">
-                  Welcome to WebChat
-                </h2>
+                <h2 className="text-2xl font-semibold">Welcome to WebChat</h2>
 
                 <p className="mt-3 text-sm text-[#8696A0]">
                   Select a friend from your chat list to open a conversation.
